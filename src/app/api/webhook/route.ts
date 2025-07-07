@@ -3,7 +3,6 @@ import Stripe from 'stripe';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// Firebase Admin SDKを初期化（すでに初期化済みでない場合のみ）
 if (!getApps().length) {
   initializeApp();
 }
@@ -16,8 +15,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
-  // Stripeが必要とする生の本文を受け取るため、ここでテキストとして読み込みます。
-  // App Routerでは、Next.jsは自動で本文を解析しないため、以前のconfigは不要です。
   const buf = await req.text();
   const sig = req.headers.get('stripe-signature')!;
 
@@ -26,21 +23,27 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
   } catch (err: any) {
+    // ▼▼▼ ここからがデバッグ用の追加コードです ▼▼▼
     console.error(`❌ Webhook signature verification failed: ${err.message}`);
+    
+    // Vercelが実際にどのシークレットキーを認識しているか、末尾6桁だけをログに出力します
+    const displayedSecret = process.env.STRIPE_WEBHOOK_SECRET
+      ? `...${process.env.STRIPE_WEBHOOK_SECRET.slice(-6)}`
+      : 'UNDEFINED or NOT SET';
+
+    console.error(`SECRET RECEIVED BY VERCE: ${displayedSecret}`);
+    // ▲▲▲ ここまでがデバッグ用の追加コードです ▲▲▲
+
     return NextResponse.json({ error: 'Webhook Error' }, { status: 400 });
   }
 
-  // 'checkout.session.completed' イベントを処理します
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
-    
-    // Stripeから顧客情報を取得し、メールアドレスを取り出す
     const customerDetails = await stripe.customers.retrieve(session.customer as string);
     const email = (customerDetails as Stripe.Customer).email;
 
     if (email) {
       try {
-        // Firestoreの 'customers' コレクションに、顧客情報を保存する
         await db.collection('customers').doc(email).set({
           email: email,
           stripeCustomerId: session.customer,
