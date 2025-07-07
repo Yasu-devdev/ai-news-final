@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+
+// ▼▼▼ このブロックがエラーを解決する重要な部分です ▼▼▼
+// Next.jsのデフォルトの本文解析を無効にし、Stripeが必要とする生の本文を受け取れるようにします。
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+// ▲▲▲ ここまで ▲▲▲
 
 // Firebase Admin SDKを初期化（すでに初期化済みでない場合のみ）
 if (!getApps().length) {
-  // Workload Identity 連携を使用しているため、認証情報は不要です。
-  // Google Cloud環境で実行されると、自動で認証されます。
   initializeApp();
 }
 const db = getFirestore();
@@ -40,7 +47,6 @@ export async function POST(req: NextRequest) {
 
     if (email) {
       try {
-        // ▼▼▼ ここが新しい処理 ▼▼▼
         // Firestoreの 'customers' コレクションに、顧客情報を保存する
         await db.collection('customers').doc(email).set({
           email: email,
@@ -51,7 +57,6 @@ export async function POST(req: NextRequest) {
         console.log(`✅ Customer ${email} saved to Firestore.`);
       } catch (dbError) {
         console.error(`🔥 Firestore write error: ${dbError}`);
-        // ここでエラーが発生しても、Stripeには成功を返すのが一般的です
       }
     }
   }
