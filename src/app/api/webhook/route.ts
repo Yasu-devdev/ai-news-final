@@ -3,15 +3,6 @@ import Stripe from 'stripe';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// ▼▼▼ このブロックがエラーを解決する重要な部分です ▼▼▼
-// Next.jsのデフォルトの本文解析を無効にし、Stripeが必要とする生の本文を受け取れるようにします。
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-// ▲▲▲ ここまで ▲▲▲
-
 // Firebase Admin SDKを初期化（すでに初期化済みでない場合のみ）
 if (!getApps().length) {
   initializeApp();
@@ -25,6 +16,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
+  // Stripeが必要とする生の本文を受け取るため、ここでテキストとして読み込みます。
+  // App Routerでは、Next.jsは自動で本文を解析しないため、以前のconfigは不要です。
   const buf = await req.text();
   const sig = req.headers.get('stripe-signature')!;
 
