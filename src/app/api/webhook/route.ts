@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+
+// Firebase Admin SDKを初期化（すでに初期化済みでない場合のみ）
+if (!getApps().length) {
+  // Workload Identity 連携を使用しているため、認証情報は不要です。
+  // Google Cloud環境で実行されると、自動で認証されます。
+  initializeApp();
+}
+const db = getFirestore();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2024-06-20',
 });
 
-// このAPIが正しくStripeからのものであることを確認するための「秘密の合言葉」
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
@@ -21,16 +30,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Webhook Error' }, { status: 400 });
   }
 
-  // 今回は 'checkout.session.completed' というイベントだけを処理します
+  // 'checkout.session.completed' イベントを処理します
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
     
-    // 決済が成功した顧客のメールアドレスを取得
+    // Stripeから顧客情報を取得し、メールアドレスを取り出す
     const customerDetails = await stripe.customers.retrieve(session.customer as string);
     const email = (customerDetails as Stripe.Customer).email;
 
-    // TODO: ここで、取得したemailをGoogle Sheetsに書き出す処理を後で追加します
-    console.log(`✅ Payment successful for: ${email}`);
+    if (email) {
+      try {
+        // ▼▼▼ ここが新しい処理 ▼▼▼
+        // Firestoreの 'customers' コレクションに、顧客情報を保存する
+        await db.collection('customers').doc(email).set({
+          email: email,
+          stripeCustomerId: session.customer,
+          subscriptionStatus: 'active',
+          createdAt: new Date(),
+        });
+        console.log(`✅ Customer ${email} saved to Firestore.`);
+      } catch (dbError) {
+        console.error(`🔥 Firestore write error: ${dbError}`);
+        // ここでエラーが発生しても、Stripeには成功を返すのが一般的です
+      }
+    }
   }
 
   return NextResponse.json({ received: true });
