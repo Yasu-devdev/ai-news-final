@@ -16,17 +16,14 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
-    // 重要: text()ではなくarrayBuffer()を使用して、生のバイトデータを取得します
     const buf = await req.arrayBuffer();
     const sig = req.headers.get('stripe-signature');
 
-    // シグネチャの存在確認
     if (!sig) {
       console.error('❌ Missing stripe-signature header');
       return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
     }
 
-    // Webhookシークレットの存在確認
     if (!webhookSecret) {
       console.error('❌ Missing STRIPE_WEBHOOK_SECRET environment variable');
       return NextResponse.json({ error: 'Missing webhook secret' }, { status: 500 });
@@ -35,8 +32,9 @@ export async function POST(req: NextRequest) {
     let event: Stripe.Event;
 
     try {
-      // ArrayBufferをUint8Arrayに変換してStripeに渡します
-      const payload = new Uint8Array(buf);
+      // ▼▼▼ ここが最後の修正点です ▼▼▼
+      // arrayBufferを、Stripe SDKが期待するBuffer型に変換します。
+      const payload = Buffer.from(buf);
       event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
     } catch (err: any) {
       console.error(`❌ Webhook signature verification failed: ${err.message}`);
