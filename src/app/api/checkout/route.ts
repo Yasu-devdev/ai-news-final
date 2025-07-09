@@ -13,6 +13,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Price ID is required' }, { status: 400 });
     }
 
+    // STUDIOのオンボーディングURL
+    const STUDIO_ONBOARDING_URL = process.env.NEXT_PUBLIC_STUDIO_ONBOARDING_URL;
+
+    if (!STUDIO_ONBOARDING_URL) {
+      console.error('STUDIO_ONBOARDING_URL is not set');
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -25,7 +33,8 @@ export async function POST(request: Request) {
       subscription_data: {
         trial_period_days: 7,
       },
-      success_url: `${request.headers.get('origin')}/?session_id={CHECKOUT_SESSION_ID}`,
+      // STUDIOのオンボーディングページにリダイレクト
+      success_url: `${STUDIO_ONBOARDING_URL}?session_id={CHECKOUT_SESSION_ID}&email={CUSTOMER_EMAIL}`,
       cancel_url: `${request.headers.get('origin')}/`,
     });
 
